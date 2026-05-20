@@ -3,11 +3,6 @@
 # ------------------------------------------------------------
 
 # ------------------------------------------------------------
-# Script version
-# ------------------------------------------------------------
-$scriptVersion = "1.2.2"
-
-# ------------------------------------------------------------
 # Windows-only compatibility check
 # ------------------------------------------------------------
 if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
@@ -34,6 +29,27 @@ if (-not (Get-Command netsh.exe -ErrorAction SilentlyContinue)) {
 $scriptFolder = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 $moduleFolder = Join-Path $scriptFolder "modules"
 $configFile = Join-Path $scriptFolder "config.cfg"
+$versionFile = Join-Path $scriptFolder "VERSION.txt"
+
+# ------------------------------------------------------------
+# Script version
+# ------------------------------------------------------------
+# VERSION.txt is the single source of truth for the package version.
+# If the file is missing or empty, the script continues using "unknown".
+$scriptVersion = "unknown"
+
+if (Test-Path $versionFile) {
+    try {
+        $versionText = (Get-Content -Path $versionFile -TotalCount 1 -ErrorAction Stop).Trim()
+
+        if (-not [string]::IsNullOrWhiteSpace($versionText)) {
+            $scriptVersion = $versionText
+        }
+    }
+    catch {
+        $scriptVersion = "unknown"
+    }
+}
 
 # ------------------------------------------------------------
 # Load module files
