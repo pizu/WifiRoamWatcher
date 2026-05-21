@@ -94,6 +94,7 @@ function Get-VisibleWifiBssids {
     }
 
     $targetRegex = [regex]::Escape($TargetSsid)
+    $activeBssidIsValid = Test-ValidWifiBssid -Bssid $ActiveBssid
     $scan = netsh wlan show networks mode=bssid
 
     $foundTargetSsid = $false
@@ -127,7 +128,7 @@ function Get-VisibleWifiBssids {
                 $channel = $Matches['c']
 
                 if ($currentBssid) {
-                    $status = if (($currentBssid -eq $ActiveBssid) -and ($ActiveSsid -eq $TargetSsid)) { "CONNECTED" } else { "" }
+                    $status = if ($activeBssidIsValid -and ($currentBssid -eq $ActiveBssid) -and ($ActiveSsid -eq $TargetSsid)) { "CONNECTED" } else { "" }
                     $alias = Get-ApAlias -Bssid $currentBssid -Aliases $Aliases
 
                     [PSCustomObject]@{
@@ -147,7 +148,7 @@ function Get-VisibleWifiBssids {
         Where-Object { $_.Status -eq "CONNECTED" } |
         Select-Object -First 1
 
-    if (-not $connectedFromScan -and $ActiveBssid -ne "NONE" -and $ActiveSsid -eq $TargetSsid) {
+    if (-not $connectedFromScan -and $activeBssidIsValid -and $ActiveSsid -eq $TargetSsid) {
         $alias = Get-ApAlias -Bssid $ActiveBssid -Aliases $Aliases
 
         $allNodes += [PSCustomObject]@{

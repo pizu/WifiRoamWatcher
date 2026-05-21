@@ -1,57 +1,22 @@
-# Wi-Fi Roam Watcher v1.0
+# Wi-Fi Roam Watcher v1.1
 
-Wi-Fi Roam Watcher is a Windows PowerShell tool for watching Wi-Fi roaming behaviour from a client laptop.
+Wi-Fi Roam Watcher is a Windows PowerShell tool for monitoring Wi-Fi roaming behaviour from a client laptop.
 
-It uses native Windows `netsh wlan` commands to show the currently connected SSID, AP/BSSID, signal, connected RSSI, channel, radio type, RX/TX rate, visible AP count, disconnect/reconnect events, roaming events, and optional AP aliases.
+It uses built-in Windows `netsh wlan` commands to track the connected SSID, AP/BSSID, optional AP aliases, signal, RSSI, channel, band, radio type, RX/TX rates, visible AP count, roaming events, disconnect/reconnect events, and client-side Wi-Fi diagnostic evidence.
 
----
+## What is new in v1.1
 
-## Features
+- Added zero-BSSID handling for cases where Windows reports the connected AP/BSSID as `00:00:00:00:00:00`.
+- Added automatic diagnostic bundle creation when zero-BSSID is detected.
+- Added `modules\WiFiRoamWatcher.Diagnostics.ps1`.
+- Added Administrator-aware WLAN report capture.
+- Added `wlanreport_wait_seconds` so the script waits for `wlan-report-latest.html` to finish before copying it.
+- Added AP count debounce to reduce noisy AP count changes from partial Windows scan results.
+- Kept AP alias support from v1.0, including alias display, alias logging, and live alias-file reload.
 
-- Monitor Wi-Fi roaming from a Windows client device.
-- Startup menu with three monitoring modes:
-  - Auto - monitor any SSID the laptop is connected to
-  - Use current connected SSID
-  - Enter SSID manually
-- Detect and log AP/BSSID roaming events.
-- Detect and log disconnect/reconnect events.
-- Show real RSSI for the connected AP.
-- Show visible AP/BSSID list for the monitored SSID.
-- Track visible AP count changes.
-- Optional AP alias support using one or more CSV files.
-- Live alias reload with alias update logging.
-- Configurable settings using `config.cfg`.
-- Configurable log path and log filename.
-- Daily log rotation support.
-- Log retention support using values such as `1d`, `2d`, `1w`, and `1m`.
-- Windows-only compatibility checks.
-- Version is read from `VERSION.txt`.
+## How to run
 
----
-
-## Requirements
-
-This tool is Windows-only.
-
-Recommended:
-
-- Windows PowerShell 5.1
-- PowerShell 7.x on Windows
-
-Required:
-
-- Windows OS
-- Wi-Fi adapter
-- `netsh.exe`
-- PowerShell 3.0 or newer
-
-No external PowerShell modules are required.
-
----
-
-## How to Run
-
-Open PowerShell in the script folder and run:
+Open PowerShell in the extracted folder and run:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass -NoProfile -File .\Start-WiFiRoamWatcher.ps1
@@ -63,11 +28,11 @@ For PowerShell 7:
 pwsh.exe -ExecutionPolicy Bypass -NoProfile -File .\Start-WiFiRoamWatcher.ps1
 ```
 
-Press `CTRL+C` to stop the monitor.
+For full WLAN HTML report collection, run PowerShell as Administrator.
 
----
+Press `CTRL+C` to stop.
 
-## Startup Options
+## Startup options
 
 When the script starts, choose one of these options:
 
@@ -78,29 +43,13 @@ When the script starts, choose one of these options:
 Q. Quit
 ```
 
-### Option 1 - Auto
+Option 1 follows whichever SSID the laptop is currently connected to. If the laptop disconnects and later connects to another SSID, the monitor follows the new connected SSID.
 
-Auto mode monitors whatever SSID the laptop is currently connected to.
+Option 2 locks the monitor to the SSID connected at startup.
 
-If the laptop disconnects and later connects to another SSID, the monitor follows the new connected SSID.
+Option 3 lets the user type an SSID manually.
 
-Use this when you want to monitor the laptop's Wi-Fi connection in general.
-
-### Option 2 - Use current connected SSID
-
-This locks the monitor to the SSID that the laptop is connected to at startup.
-
-Use this when troubleshooting one specific SSID.
-
-### Option 3 - Enter SSID manually
-
-This allows you to type the SSID name manually.
-
-Use this when you want to monitor an SSID that is visible but not currently connected.
-
----
-
-## Folder Layout
+## Folder layout
 
 ```text
 Wi-Fi Roam Watcher\
@@ -108,115 +57,149 @@ Wi-Fi Roam Watcher\
 ├── Start-WiFiRoamWatcher.ps1
 ├── config.cfg
 ├── README.md
+├── RELEASE_NOTES_v1.1.txt
 ├── VERSION.txt
+├── .gitignore
 │
 └── modules\
+    ├── WiFiRoamWatcher.Aliases.ps1
     ├── WiFiRoamWatcher.Common.ps1
     ├── WiFiRoamWatcher.Config.ps1
-    ├── WiFiRoamWatcher.Aliases.ps1
+    ├── WiFiRoamWatcher.Diagnostics.ps1
     ├── WiFiRoamWatcher.Netsh.ps1
     └── WiFiRoamWatcher.Display.ps1
 ```
 
----
+The `diagnostics\` folder is created automatically when a diagnostic capture is needed.
 
 ## config.cfg
-
-The script uses `config.cfg` for configurable options.
 
 Default config:
 
 ```ini
+# ==============================================================================
+# Wi-Fi Roam Watcher v1.1 Configuration
+# ==============================================================================
+#
+# Notes:
+# - Lines starting with # are comments.
+# - Use key=value format.
+# - Do not wrap values in quotes.
+# - Leave folder/path values blank to use the same folder as Start-WiFiRoamWatcher.ps1.
+# - Relative paths are resolved from the script folder.
+#
+
+# ------------------------------------------------------------------------------
+# AP ALIASES
+# ------------------------------------------------------------------------------
+# Optional friendly names for AP/BSSID values.
+#
+# CSV format:
+#   Match,Alias
+#   00:a7:42:f5:5e:2f,Example-AP-Name
+#
+# ap_alias_list_path:
+#   Folder containing the alias CSV files.
+#   Blank = script folder.
+#
+# ap_alias_list:
+#   Comma-separated list of alias CSV files.
+#   Blank = disable aliases.
+#
+# Examples:
+#   ap_alias_list=ap_aliases.csv
+#   ap_alias_list=mst_exchange_aps.csv,ap_aliases.csv
+#
 ap_alias_list_path=
-ap_alias_list=
+ap_alias_list=mst_exchange_aps.csv,ap_aliases.csv
+
+# ------------------------------------------------------------------------------
+# LOGGING
+# ------------------------------------------------------------------------------
+# log_path:
+#   Folder where the active log file and rotated logs are stored.
+#   Blank = script folder.
+#
+# log_filename:
+#   Active log filename.
+#
+# log_rotation:
+#   true  = rotate the log when a new day starts.
+#   false = keep writing to the same log file.
+#
+# log_retention:
+#   How long to keep rotated log files.
+#   Supported units: d = days, w = weeks, m = months.
+#   Examples: 1d, 7d, 2w, 1m
+#
 log_path=
 log_filename=wifi_roam_watcher.log
 log_rotation=true
 log_retention=1d
+
+# ------------------------------------------------------------------------------
+# DIAGNOSTIC CAPTURE
+# ------------------------------------------------------------------------------
+# diagnostics_enabled:
+#   true  = allow diagnostic bundles to be created.
+#   false = disable diagnostic bundles.
+#
+# diagnostics_path:
+#   Folder where diagnostic bundles are saved.
+#   Relative paths are based on the script folder.
+#
+# zero_bssid_diagnostics:
+#   true  = capture evidence if Windows reports the connected BSSID as
+#           00:00:00:00:00:00.
+#   false = suppress the zero-BSSID event but do not create a diagnostic bundle.
+#
+# zero_bssid_diagnostic_cooldown_seconds:
+#   Minimum time between repeated zero-BSSID diagnostic captures.
+#
+# wlanreport_duration_days:
+#   Used by: netsh wlan show wlanreport duration=N
+#
+# wlanreport_wait_seconds:
+#   How long to wait for wlan-report-latest.html to be generated before copying it.
+#
+# Important:
+# - Windows requires Administrator rights for netsh wlan show wlanreport.
+# - Without Administrator rights, the script still captures interfaces.txt,
+#   networks-bssid.txt, and drivers.txt, then skips the WLAN HTML report cleanly.
+#
+diagnostics_enabled=true
+diagnostics_path=diagnostics
+zero_bssid_diagnostics=true
+zero_bssid_diagnostic_cooldown_seconds=300
+wlanreport_duration_days=3
+wlanreport_wait_seconds=90
+
+# ------------------------------------------------------------------------------
+# AP COUNT CHANGE DEBOUNCE
+# ------------------------------------------------------------------------------
+# Windows can sometimes return partial scan results from:
+#   netsh wlan show networks mode=bssid
+#
+# ap_count_debounce_samples:
+#   Number of repeated samples required before logging an AP count change.
+#   Higher value = less noisy AP_COUNT logs.
+#
+ap_count_debounce_samples=3
 ```
 
-### Configuration Options
+### Logging settings
 
-#### ap_alias_list_path
+`log_path=` is the folder where logs are stored. If empty, the script folder is used.
 
-```ini
-ap_alias_list_path=
-```
-
-Folder containing alias CSV files.
-
-If empty, the script folder is used.
-
-Example:
-
-```ini
-ap_alias_list_path=C:\WiFiAliases
-```
-
-#### ap_alias_list
-
-```ini
-ap_alias_list=
-```
-
-Comma-separated list of alias CSV files.
-
-There is no default alias file. If this is empty, no aliases are loaded.
-
-Example:
-
-```ini
-ap_alias_list=floor1.csv,floor2.csv
-```
-
-#### log_path
-
-```ini
-log_path=
-```
-
-Folder where logs are stored.
-
-If empty, the script folder is used.
-
-Example:
-
-```ini
-log_path=C:\Logs\WiFiRoamWatcher
-```
-
-#### log_filename
+`log_filename=` is the active log filename. The default is:
 
 ```ini
 log_filename=wifi_roam_watcher.log
 ```
 
-Name of the active log file.
+`log_rotation=true` enables daily log rotation. Use `false` to disable it.
 
-#### log_rotation
-
-```ini
-log_rotation=true
-```
-
-Enables or disables daily log rotation.
-
-Valid values:
-
-```text
-true
-false
-```
-
-#### log_retention
-
-```ini
-log_retention=1d
-```
-
-Controls how long rotated logs are kept.
-
-Examples:
+`log_retention=` controls how long rotated logs are kept. Examples:
 
 ```ini
 log_retention=1d
@@ -225,65 +208,147 @@ log_retention=1w
 log_retention=1m
 ```
 
-Meaning:
 
-```text
-1d = 1 day
-2d = 2 days
-1w = 1 week
-1m = 1 month
+## AP aliases
+
+AP aliases are optional. They let you display friendly AP names next to BSSIDs in the live screen and logs.
+
+In `config.cfg`:
+
+```ini
+ap_alias_list_path=
+ap_alias_list=mst_exchange_aps.csv,ap_aliases.csv
 ```
 
----
+`ap_alias_list_path=` is the folder containing alias CSV files. If empty, the script folder is used.
 
-## Alias CSV Files
-
-Alias files are optional and must be listed in `config.cfg`.
+`ap_alias_list=` is a comma-separated list of CSV files. Leave it empty to disable aliases. Missing files are skipped, so you can list optional alias files safely.
 
 CSV format:
 
 ```csv
 Match,Alias
-00:a7:42:f5:5e:2f,Office-AP
-f0:7f:06:cd:30:4f,MeetingRoom-AP
-cd:30,Partial-Match-Example
+24:71:21:89:1c:ef,ZTN-D-C1A-F1-17
+89:1c,ZTN-D-C1A-F1-17
 ```
 
-Full BSSID matches are recommended.
+`Match` can be a full BSSID or a partial BSSID fragment. Alias files are reloaded while the script runs, and alias changes are logged as `ALIAS_UPDATE`.
 
-Partial matches work, but they can match more than one AP if the text is not unique.
+## Zero-BSSID diagnostics
 
-Alias files are reloaded while the script runs. If a visible AP gets a new alias, changes alias, or loses its alias, the script logs an `ALIAS_UPDATE` event.
+v1.1 treats this connected BSSID as invalid/pending:
 
----
+```text
+00:00:00:00:00:00
+```
 
-## Log Rotation
+This value is not treated as a real AP. When it appears, Wi-Fi Roam Watcher suppresses START, ROAM, RECONNECTED, and DISCONNECTED changes until Windows reports a valid connected BSSID again.
 
-When rotation is enabled, the active log is renamed when it belongs to a previous day.
+When zero-BSSID is detected, the script creates a timestamped diagnostic folder under:
+
+```text
+.\diagnostics\
+```
 
 Example:
 
 ```text
-wifi_roam_watcher.log
+diagnostics\20260521_070125-zbs\
 ```
 
-becomes:
+The diagnostic folder contains:
 
 ```text
-wifi_roam_watcher_20260520.log
+summary.txt
+interfaces.txt
+networks-bssid.txt
+drivers.txt
+wlanreport-output.txt
+wlan-yyyyMMdd_HHmmss.html
 ```
 
-If that file already exists, a time suffix is added:
+The script captures:
+
+```powershell
+netsh wlan show interfaces
+netsh wlan show networks mode=bssid
+netsh wlan show drivers
+netsh wlan show wlanreport duration=N
+```
+
+Windows writes the WLAN report to its normal location:
 
 ```text
-wifi_roam_watcher_20260520_091500.log
+C:\ProgramData\Microsoft\Windows\WlanReport\wlan-report-latest.html
 ```
 
-The script writes a rotation message into the old log before renaming it and into the new log after rotation.
+When the script is running as Administrator, Wi-Fi Roam Watcher copies that file into the timestamped diagnostic folder, for example:
 
----
+```text
+diagnostics\20260521_070125-zbs\wlan-20260521_070125.html
+```
 
-## Log Event Types
+The original Windows report is not moved or deleted.
+
+If the script is not running as Administrator, v1.1 still captures `interfaces.txt`, `networks-bssid.txt`, and `drivers.txt`, but the WLAN HTML report is skipped cleanly. The reason is written to `wlanreport-output.txt`.
+
+### Diagnostic settings
+
+```ini
+diagnostics_enabled=true
+```
+
+Enables or disables all diagnostic bundle creation.
+
+```ini
+diagnostics_path=diagnostics
+```
+
+Sets where diagnostic bundles are stored. Relative paths are based on the script folder.
+
+```ini
+zero_bssid_diagnostics=true
+```
+
+Enables or disables diagnostic capture for invalid/zero connected BSSID events.
+
+```ini
+zero_bssid_diagnostic_cooldown_seconds=300
+```
+
+Prevents repeated diagnostic bundles every loop while the same issue is still happening.
+
+```ini
+wlanreport_duration_days=3
+```
+
+Controls the duration used by `netsh wlan show wlanreport duration=N`.
+
+```ini
+wlanreport_wait_seconds=90
+```
+
+Controls how long the script waits for `wlan-report-latest.html` to finish before copying it into the diagnostic bundle. This only applies when the script is running as Administrator.
+
+## AP count debounce
+
+Windows can sometimes return partial scan results from:
+
+```powershell
+netsh wlan show networks mode=bssid
+```
+
+This can make the visible AP count jump briefly, for example `10 -> 1 -> 10`.
+
+v1.1 debounces AP count changes with:
+
+```ini
+ap_count_debounce_samples=3
+```
+
+A new AP count must be seen repeatedly before an `AP_COUNT` event is written.
+
+## Log event types
 
 Common log events:
 
@@ -297,45 +362,25 @@ RECONNECTED   Client reconnected to the monitored SSID.
 AUTO_SSID     Auto mode changed the monitored SSID.
 AP_COUNT      Visible AP count changed while connected.
 ALIAS_UPDATE  AP alias was added, changed, or removed while visible.
+DIAG          Diagnostic capture started or completed.
+DIAG_WARN     Diagnostic capture completed with a warning.
+DIAG_ERROR    Diagnostic capture failed.
+WARN          Invalid/pending connected BSSID detected.
+INFO          Invalid/pending connected BSSID recovered.
 LOG_ROTATE    Log file was rotated.
 LOG_RETENTION Old rotated log file was deleted.
 ERROR         Script caught an error but continued running.
 ```
 
-Example log entries:
+## Netsh commands used
 
-```text
-[2026-05-20 09:20:01] STARTUP: Wi-Fi Roam Watcher v1.0 | Monitoring SSID [GOCorp]
-[2026-05-20 09:20:05] START: Current connection 00:a7:42:f5:5e:2f [Office-AP] | Signal: 92% | RSSI: -42 dBm | Chan: 100 | APs seen: 2
-[2026-05-20 09:25:44] ROAMED: From 00:a7:42:f5:5e:2f [Office-AP] | Signal: 92% | RSSI: -42 dBm | Chan: 100 -> To f0:7f:06:cd:30:4f [MeetingRoom-AP] | Signal: 96% | RSSI: -36 dBm | Chan: 132 | APs seen: 2
-[2026-05-20 09:35:10] DISCONNECTED: Lost connection to monitored SSID | Previous SSID: GOCorp | Previous AP: f0:7f:06:cd:30:4f [MeetingRoom-AP] | Last Signal: 88% | Last RSSI: -43 dBm | Last Chan: 132
-[2026-05-20 09:35:20] RECONNECTED: Connected to monitored SSID GOCorp | AP: 00:a7:42:f5:5e:2f [Office-AP] | Signal: 92% | RSSI: -42 dBm | Chan: 100 | Previous AP: f0:7f:06:cd:30:4f [MeetingRoom-AP] | APs seen: 2
-```
-
----
-
-## Netsh Commands Used
-
-Wi-Fi Roam Watcher uses two Windows `netsh wlan` commands.
-
-### Current Wi-Fi Connection
+Wi-Fi Roam Watcher uses:
 
 ```powershell
 netsh wlan show interfaces all
 ```
 
-This reads the current Wi-Fi connection and provides:
-
-- Current connection state
-- Connected SSID
-- Connected BSSID/AP MAC
-- Signal percentage
-- Real connected RSSI
-- Band
-- Channel
-- Radio type
-- Receive rate
-- Transmit rate
+This reads the current Wi-Fi connection and provides the connected SSID, BSSID, signal, real connected RSSI, band, channel, radio type, RX rate, and TX rate.
 
 Example fields used:
 
@@ -352,123 +397,25 @@ Signal                 : 92%
 Rssi                   : -42
 ```
 
-### Visible Wi-Fi Networks and BSSIDs
+The second command is:
 
 ```powershell
 netsh wlan show networks mode=bssid
 ```
 
-This scans visible SSIDs and BSSIDs/APs.
+This scans visible SSIDs and BSSIDs/APs. The script uses it to list visible APs for the monitored SSID and to get BSSID, signal percentage, and channel.
 
-The script uses it to list visible APs for the monitored SSID and to get:
+Important: real RSSI is only taken from `netsh wlan show interfaces all` for the connected AP. The visible AP list from `netsh wlan show networks mode=bssid` provides signal percentage, not real RSSI per BSSID.
 
-- BSSID/AP MAC address
-- Signal percentage
-- Band
-- Channel
-- Radio type where available
-
-Example fields used:
-
-```text
-SSID 1 : MySSID
-    BSSID 1                 : 00:a7:42:f5:5e:2f
-         Signal             : 92%
-         Radio type         : 802.11ac
-         Band               : 5 GHz
-         Channel            : 100
-```
-
-Important: real RSSI is only taken from `netsh wlan show interfaces all` for the connected AP.
-
-The visible AP list from `netsh wlan show networks mode=bssid` provides signal percentage, not real RSSI per BSSID.
-
-This avoids displaying estimated or fake RSSI values for scanned APs.
-
----
-
-## Quick User Steps
+## Quick user steps
 
 1. Extract the folder.
-2. Open PowerShell in the extracted folder.
-3. Run:
+2. Run `Start-WiFiRoamWatcher.ps1` using the command above.
+3. Select option 1, 2, or 3.
+4. Optionally configure logging and diagnostics in `config.cfg`.
+5. Check `wifi_roam_watcher.log` for events.
+6. If zero-BSSID happens, check the generated folder under `diagnostics\`.
 
-```powershell
-powershell.exe -ExecutionPolicy Bypass -NoProfile -File .\Start-WiFiRoamWatcher.ps1
-```
+## Privacy note
 
-4. Select option `1`, `2`, or `3`.
-5. Optionally configure aliases and logging in `config.cfg`.
-6. Press `CTRL+C` to stop.
-
----
-
-## Troubleshooting
-
-### Script does not start because of execution policy
-
-Run it with:
-
-```powershell
-powershell.exe -ExecutionPolicy Bypass -NoProfile -File .\Start-WiFiRoamWatcher.ps1
-```
-
-### Missing module error
-
-Make sure the `modules` folder exists and contains:
-
-```text
-WiFiRoamWatcher.Common.ps1
-WiFiRoamWatcher.Config.ps1
-WiFiRoamWatcher.Aliases.ps1
-WiFiRoamWatcher.Netsh.ps1
-WiFiRoamWatcher.Display.ps1
-```
-
-### No SSID detected
-
-Check the Wi-Fi connection manually:
-
-```powershell
-netsh wlan show interfaces all
-```
-
-### No BSSID entries found
-
-Check if the SSID is visible:
-
-```powershell
-netsh wlan show networks mode=bssid
-```
-
-Make sure the SSID name is typed exactly as shown by Windows.
-
-### RSSI shows Unknown
-
-The Wi-Fi driver or Windows version may not expose the `Rssi` field.
-
-The script will still show signal percentage.
-
-### Aliases not showing
-
-Check:
-
-1. `config.cfg` has `ap_alias_list=` configured.
-2. The alias CSV file exists.
-3. The CSV has the correct header:
-
-```csv
-Match,Alias
-```
-
-4. The BSSID or partial BSSID matches what appears in the script output.
-
----
-
-## Notes
-
-- This tool is Windows-only.
-- It uses native Windows `netsh wlan` commands.
-- It does not require any external PowerShell modules.
-- RSSI is intentionally shown only for the connected AP.
-- Visible APs show signal percentage, not RSSI.
+The WLAN HTML report can contain computer names, usernames, domain details, saved Wi-Fi profiles, certificate information, IP configuration, and other environment details. Review or sanitize the report before sharing it externally.

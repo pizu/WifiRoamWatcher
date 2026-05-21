@@ -57,6 +57,7 @@ if (Test-Path $versionFile) {
 $requiredModuleFiles = @(
     "WiFiRoamWatcher.Common.ps1",
     "WiFiRoamWatcher.Config.ps1",
+    "WiFiRoamWatcher.Diagnostics.ps1",
     "WiFiRoamWatcher.Aliases.ps1",
     "WiFiRoamWatcher.Netsh.ps1",
     "WiFiRoamWatcher.Display.ps1"
@@ -79,6 +80,7 @@ foreach ($moduleName in $requiredModuleFiles) {
 # ------------------------------------------------------------
 $requiredFunctions = @(
     "Normalize-Bssid",
+    "Test-ValidWifiBssid",
     "Format-Rssi",
     "Get-LogTimestamp",
     "Write-WiFiRoamWatcherLog",
@@ -86,7 +88,9 @@ $requiredFunctions = @(
     "Read-WiFiRoamWatcherConfig",
     "Resolve-WiFiRoamWatcherPath",
     "Get-ConfigBoolean",
+    "Get-ConfigInteger",
     "Invoke-WiFiRoamWatcherLogMaintenance",
+    "Invoke-WiFiRoamWatcherDiagnosticCapture",
     "Get-AliasFilesFromConfig",
     "Load-ApAliases",
     "Get-ApAlias",
@@ -145,6 +149,8 @@ $global:lastChannel = "UNKNOWN"
 # Last known visible AP count
 # ------------------------------------------------------------
 $global:lastApCount = -1
+$global:pendingApCount = $null
+$global:pendingApCountSeen = 0
 
 # ------------------------------------------------------------
 # Last known connection state
@@ -153,9 +159,16 @@ $global:lastConnectionState = "UNKNOWN"
 $global:lastConnectedSsid = "UNKNOWN"
 
 # ------------------------------------------------------------
+# Last known invalid-BSSID diagnostic state
+# ------------------------------------------------------------
+$global:lastInvalidBssidDiagnosticTime = $null
+$global:invalidBssidWarningActive = $false
+
+# ------------------------------------------------------------
 # Last known alias state per BSSID
 # ------------------------------------------------------------
-# This is used to detect live alias file changes without spamming logs at startup.
+# Alias files can be edited while the script runs.
+# The first scan creates a baseline; later changes are logged.
 $global:lastAliasByBssid = @{}
 $global:aliasBaselineReady = $false
 
@@ -185,7 +198,7 @@ Write-WiFiRoamWatcherLog -Path $logFile -Message "[$(Get-LogTimestamp)] STARTUP:
 # ------------------------------------------------------------
 while ($true) {
     try {
-        # Reload config every loop so alias lists and log settings can be changed while running.
+        # Reload config every loop so log, alias, and diagnostic settings can be changed while running.
         $config = Read-WiFiRoamWatcherConfig -Path $configFile -ScriptFolder $scriptFolder
 
         $newLogFolder = Resolve-WiFiRoamWatcherPath -ConfiguredPath $config.log_path -DefaultPath $scriptFolder
@@ -211,12 +224,21 @@ while ($true) {
             -RotationEnabled $logRotationEnabled `
             -RetentionSpec $config.log_retention
 
+        # Diagnostic and debounce settings are re-read every loop.
+        $diagnosticsEnabled = Get-ConfigBoolean -Value $config.diagnostics_enabled -DefaultValue $true
+        $zeroBssidDiagnosticsEnabled = Get-ConfigBoolean -Value $config.zero_bssid_diagnostics -DefaultValue $true
+        $diagnosticRoot = Resolve-WiFiRoamWatcherPath -ConfiguredPath $config.diagnostics_path -DefaultPath $scriptFolder
+        $zeroBssidDiagnosticCooldownSeconds = Get-ConfigInteger -Value $config.zero_bssid_diagnostic_cooldown_seconds -DefaultValue 300 -MinimumValue 30 -MaximumValue 86400
+        $wlanReportDurationDays = Get-ConfigInteger -Value $config.wlanreport_duration_days -DefaultValue 3 -MinimumValue 1 -MaximumValue 30
+        $wlanReportWaitSeconds = Get-ConfigInteger -Value $config.wlanreport_wait_seconds -DefaultValue 90 -MinimumValue 5 -MaximumValue 600
+        $apCountDebounceSamples = Get-ConfigInteger -Value $config.ap_count_debounce_samples -DefaultValue 3 -MinimumValue 1 -MaximumValue 100
+
+        # Alias settings are re-read every loop so CSV changes can be picked up without restarting.
         $aliasFolder = Resolve-WiFiRoamWatcherPath -ConfiguredPath $config.ap_alias_list_path -DefaultPath $scriptFolder
         $aliasFiles = Get-AliasFilesFromConfig `
             -AliasListPath $aliasFolder `
             -AliasList $config.ap_alias_list
 
-        # Load aliases every loop so listed alias CSV files can be edited while running.
         $apAliases = Load-ApAliases -Paths $aliasFiles
 
         # Read current connected Wi-Fi interface.
@@ -227,15 +249,18 @@ while ($true) {
         $currentSsid = ([string]$interfaceInfo.SSID).Trim()
         $currentBssid = ([string]$interfaceInfo.BSSID).Trim().ToLower()
 
-        $currentIsConnected = (
+        $currentLooksConnected = (
             $currentState -ieq "connected" -and
-            $currentBssid -ne "none" -and
             -not [string]::IsNullOrWhiteSpace($currentSsid) -and
             $currentSsid -ne "UNKNOWN"
         )
 
+
+        $currentHasValidBssid = Test-ValidWifiBssid -Bssid $currentBssid
+        $currentIsConnected = ($currentLooksConnected -and $currentHasValidBssid)
+
         if ($monitorMode -eq "Auto") {
-            if ($currentIsConnected) {
+            if ($currentLooksConnected) {
                 if ([string]::IsNullOrWhiteSpace($target) -or $target -eq "AUTO" -or $target -ne $currentSsid) {
                     $oldTarget = $target
                     $target = $currentSsid
@@ -271,6 +296,71 @@ while ($true) {
         # Current timestamp for logs.
         $timestamp = Get-LogTimestamp
 
+        # Detect the Windows/driver condition where the interface says it is connected,
+        # but the connected BSSID is empty, invalid, or 00:00:00:00:00:00.
+        $invalidBssidForMonitoredSsid = $false
+
+        if ($currentLooksConnected -and (-not $currentHasValidBssid)) {
+            if ($monitorMode -eq "Auto" -or $currentSsid -ieq $target) {
+                $invalidBssidForMonitoredSsid = $true
+            }
+        }
+
+        if ($invalidBssidForMonitoredSsid) {
+            $now = Get-Date
+            $shouldCaptureDiagnostic = $false
+
+            if ($diagnosticsEnabled -and $zeroBssidDiagnosticsEnabled) {
+                if ($null -eq $global:lastInvalidBssidDiagnosticTime) {
+                    $shouldCaptureDiagnostic = $true
+                }
+                elseif (($now - $global:lastInvalidBssidDiagnosticTime).TotalSeconds -ge $zeroBssidDiagnosticCooldownSeconds) {
+                    $shouldCaptureDiagnostic = $true
+                }
+            }
+
+            if ($shouldCaptureDiagnostic) {
+                Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] DIAG: Invalid connected BSSID [$currentBssid] detected for SSID [$currentSsid]. Capturing Wi-Fi diagnostics..."
+
+                try {
+                    $diag = Invoke-WiFiRoamWatcherDiagnosticCapture `
+                        -Reason "zero-bssid" `
+                        -DiagnosticRoot $diagnosticRoot `
+                        -WlanReportDurationDays $wlanReportDurationDays `
+                        -WlanReportWaitSeconds $wlanReportWaitSeconds
+
+                    Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] DIAG: Wi-Fi diagnostics saved to: $($diag.CaptureDir)"
+
+                    if ($diag.WlanReportStatus -eq "skipped-not-admin") {
+                        Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] DIAG: WLAN HTML report skipped because PowerShell is not running as Administrator."
+                    }
+                    elseif ($diag.WlanReportStatus -eq "copied") {
+                        Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] DIAG: WLAN HTML report copied to: $($diag.WlanReportPath)"
+                    }
+                    elseif ($diag.WlanReportStatus -eq "not-found") {
+                        Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] DIAG_WARN: WLAN HTML report was not found after waiting $wlanReportWaitSeconds seconds."
+                    }
+                }
+                catch {
+                    Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] DIAG_ERROR: Failed to capture Wi-Fi diagnostics: $($_.Exception.Message)"
+                }
+
+                $global:lastInvalidBssidDiagnosticTime = $now
+            }
+
+            if (-not $global:invalidBssidWarningActive) {
+                Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] WARN: Connected SSID [$currentSsid] returned invalid BSSID [$currentBssid]. Treating BSSID as pending and suppressing START/ROAM/DISCONNECT logs until a valid BSSID is reported."
+                $global:invalidBssidWarningActive = $true
+            }
+        }
+        else {
+            if ($global:invalidBssidWarningActive) {
+                Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] INFO: Connected BSSID is valid again: [$currentBssid] for SSID [$currentSsid]."
+            }
+
+            $global:invalidBssidWarningActive = $false
+        }
+
         # Find connected AP from visible AP list.
         $connectedNode = $allNodes |
             Where-Object { $_.Status -eq "CONNECTED" } |
@@ -279,8 +369,6 @@ while ($true) {
         # ------------------------------------------------------------
         # Alias update detection
         # ------------------------------------------------------------
-        # Aliases can be updated live in the configured CSV files.
-        # The first scan only creates a baseline. After that, changes are logged.
         foreach ($node in @($allNodes)) {
             if ($null -eq $node -or [string]::IsNullOrWhiteSpace([string]$node.BSSID)) {
                 continue
@@ -325,7 +413,7 @@ while ($true) {
         else {
             $currentIsConnectedToTarget = (
                 $currentState -ieq "connected" -and
-                $currentBssid -ne "none" -and
+                $currentHasValidBssid -and
                 $currentSsid -ieq $target
             )
         }
@@ -336,7 +424,10 @@ while ($true) {
         # Used to avoid duplicate START/ROAM/SIGNAL logs on the same loop as a RECONNECTED event.
         $skipConnectedChangeLog = $false
 
-        if ($global:lastConnectionState -eq "UNKNOWN") {
+        if ($invalidBssidForMonitoredSsid) {
+            $skipConnectedChangeLog = $true
+        }
+        elseif ($global:lastConnectionState -eq "UNKNOWN") {
             if ($currentIsConnectedToTarget) {
                 $global:lastConnectionState = "connected"
                 $global:lastConnectedSsid = $interfaceInfo.SSID
@@ -465,16 +556,34 @@ while ($true) {
         # AP count change logging
         # ------------------------------------------------------------
         # Only log AP-count changes while connected to the monitored SSID.
-        # This avoids noisy and misleading entries during disconnect/reconnect scan gaps.
-        # Also ignore zero-count scans because Windows scan results can briefly return no APs.
-        if ($currentIsConnectedToTarget -and $apCount -gt 0) {
+        # Ignore zero-count scans because Windows scan results can briefly return no APs.
+        # Debounce changes so short-lived partial scan results do not spam the log.
+        if ($currentIsConnectedToTarget -and (-not $invalidBssidForMonitoredSsid) -and $apCount -gt 0) {
             if ($global:lastApCount -eq -1) {
                 $global:lastApCount = $apCount
+                $global:pendingApCount = $null
+                $global:pendingApCountSeen = 0
             }
-            elseif ($apCount -ne $global:lastApCount) {
-                Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] AP_COUNT: Visible AP count changed from $global:lastApCount to $apCount while connected to $target"
+            elseif ($apCount -eq $global:lastApCount) {
+                $global:pendingApCount = $null
+                $global:pendingApCountSeen = 0
+            }
+            else {
+                if ($global:pendingApCount -eq $apCount) {
+                    $global:pendingApCountSeen++
+                }
+                else {
+                    $global:pendingApCount = $apCount
+                    $global:pendingApCountSeen = 1
+                }
 
-                $global:lastApCount = $apCount
+                if ($global:pendingApCountSeen -ge $apCountDebounceSamples) {
+                    Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] AP_COUNT: Visible AP count changed from $global:lastApCount to $apCount while connected to $target"
+
+                    $global:lastApCount = $apCount
+                    $global:pendingApCount = $null
+                    $global:pendingApCountSeen = 0
+                }
             }
         }
 

@@ -10,6 +10,37 @@ function Normalize-Bssid {
     return $null
 }
 
+
+function Test-ValidWifiBssid {
+    param(
+        [string]$Bssid
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Bssid)) {
+        return $false
+    }
+
+    $normalised = ($Bssid.Trim() -replace '-', ':').ToLower()
+
+    if ($normalised -eq "none") {
+        return $false
+    }
+
+    if ($normalised -eq "unknown") {
+        return $false
+    }
+
+    if ($normalised -eq "00:00:00:00:00:00") {
+        return $false
+    }
+
+    if ($normalised -notmatch '^[0-9a-f]{2}(:[0-9a-f]{2}){5}$') {
+        return $false
+    }
+
+    return $true
+}
+
 function Format-Rssi {
     param(
         [object]$Rssi
