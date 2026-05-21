@@ -24,12 +24,18 @@ function Show-WiFiRoamWatcherScreen {
         $aliasText = ($AliasFiles -join ", ")
     }
 
+    $activeBssidText = $InterfaceInfo.BSSID
+
+    if ($InterfaceInfo.State -ieq "connected" -and -not (Test-ValidWifiBssid -Bssid $InterfaceInfo.BSSID)) {
+        $activeBssidText = "$($InterfaceInfo.BSSID) (invalid/pending)"
+    }
+
     Write-Host "Wi-Fi Roam Watcher v$Version" -ForegroundColor Yellow
     Write-Host "Mode: $MonitorMode" -ForegroundColor Yellow
     Write-Host "Monitoring SSID: $TargetSsid" -ForegroundColor Yellow
     Write-Host "Connected SSID: $($InterfaceInfo.SSID)" -ForegroundColor Cyan
     Write-Host "Connection State: $($InterfaceInfo.State)" -ForegroundColor Cyan
-    Write-Host "Active BSSID: $($InterfaceInfo.BSSID)" -ForegroundColor Cyan
+    Write-Host "Active BSSID: $activeBssidText" -ForegroundColor Cyan
     Write-Host "Active Signal: $($InterfaceInfo.Signal)%" -ForegroundColor Cyan
     Write-Host "Active RSSI: $(Format-Rssi -Rssi $InterfaceInfo.RSSI)" -ForegroundColor Cyan
     Write-Host "Band: $($InterfaceInfo.Band) | Channel: $($InterfaceInfo.Channel) | Radio: $($InterfaceInfo.Radio)" -ForegroundColor Cyan
@@ -65,6 +71,9 @@ function Show-WiFiRoamWatcherScreen {
         $currentAlias = if ($connectedNode.Alias) { $connectedNode.Alias } else { "No Alias" }
 
         Write-Host "Current Connected MAC: $($connectedNode.BSSID) [$currentAlias] ($($connectedNode.Signal)%, RSSI: $(Format-Rssi -Rssi $InterfaceInfo.RSSI)) Chan: $($connectedNode.Channel)" -ForegroundColor Green
+    }
+    elseif ($InterfaceInfo.State -ieq "connected" -and -not (Test-ValidWifiBssid -Bssid $InterfaceInfo.BSSID)) {
+        Write-Host "Current Connected MAC: pending/invalid from Windows: $($InterfaceInfo.BSSID)" -ForegroundColor DarkYellow
     }
     else {
         Write-Host "Current Connected MAC: NONE" -ForegroundColor Red

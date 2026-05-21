@@ -1,0 +1,4 @@
+Match,Alias
+# Match can be a full BSSID or partial BSSID fragment. Remove this comment line before using Import-Csv if needed.
+aa:bb:cc:dd:ee:ff,Example-AP-01
+cc:dd,Example-AP-02

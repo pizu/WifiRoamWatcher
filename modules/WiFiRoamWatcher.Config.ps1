@@ -6,15 +6,114 @@ function Read-WiFiRoamWatcherConfig {
 
     if (-not (Test-Path $Path)) {
         @(
-            "# Wi-Fi Roam Watcher configuration",
-            "# Leave paths empty to use the same folder as Start-WiFiRoamWatcher.ps1.",
-            "# No alias file is used by default. Add CSV names to ap_alias_list to enable aliases.",
+            "# ==============================================================================",
+            "# Wi-Fi Roam Watcher v1.1 Configuration",
+            "# ==============================================================================",
+            "#",
+            "# Notes:",
+            "# - Lines starting with # are comments.",
+            "# - Use key=value format.",
+            "# - Do not wrap values in quotes.",
+            "# - Leave folder/path values blank to use the same folder as Start-WiFiRoamWatcher.ps1.",
+            "# - Relative paths are resolved from the script folder.",
+            "#",
+            "",
+            "# ------------------------------------------------------------------------------",
+            "# AP ALIASES",
+            "# ------------------------------------------------------------------------------",
+            "# Optional friendly names for AP/BSSID values.",
+            "#",
+            "# CSV format:",
+            "#   Match,Alias",
+            "#   00:a7:42:f5:5e:2f,Example-AP-Name",
+            "#",
+            "# ap_alias_list_path:",
+            "#   Folder containing the alias CSV files.",
+            "#   Blank = script folder.",
+            "#",
+            "# ap_alias_list:",
+            "#   Comma-separated list of alias CSV files.",
+            "#   Blank = disable aliases.",
+            "#",
+            "# Examples:",
+            "#   ap_alias_list=ap_aliases.csv",
+            "#   ap_alias_list=mst_exchange_aps.csv,ap_aliases.csv",
+            "#",
             "ap_alias_list_path=",
-            "ap_alias_list=",
+            "ap_alias_list=mst_exchange_aps.csv,ap_aliases.csv",
+            "",
+            "# ------------------------------------------------------------------------------",
+            "# LOGGING",
+            "# ------------------------------------------------------------------------------",
+            "# log_path:",
+            "#   Folder where the active log file and rotated logs are stored.",
+            "#   Blank = script folder.",
+            "#",
+            "# log_filename:",
+            "#   Active log filename.",
+            "#",
+            "# log_rotation:",
+            "#   true  = rotate the log when a new day starts.",
+            "#   false = keep writing to the same log file.",
+            "#",
+            "# log_retention:",
+            "#   How long to keep rotated log files.",
+            "#   Supported units: d = days, w = weeks, m = months.",
+            "#   Examples: 1d, 7d, 2w, 1m",
+            "#",
             "log_path=",
             "log_filename=wifi_roam_watcher.log",
             "log_rotation=true",
-            "log_retention=1d"
+            "log_retention=1d",
+            "",
+            "# ------------------------------------------------------------------------------",
+            "# DIAGNOSTIC CAPTURE",
+            "# ------------------------------------------------------------------------------",
+            "# diagnostics_enabled:",
+            "#   true  = allow diagnostic bundles to be created.",
+            "#   false = disable diagnostic bundles.",
+            "#",
+            "# diagnostics_path:",
+            "#   Folder where diagnostic bundles are saved.",
+            "#   Relative paths are based on the script folder.",
+            "#",
+            "# zero_bssid_diagnostics:",
+            "#   true  = capture evidence if Windows reports the connected BSSID as",
+            "#           00:00:00:00:00:00.",
+            "#   false = suppress the zero-BSSID event but do not create a diagnostic bundle.",
+            "#",
+            "# zero_bssid_diagnostic_cooldown_seconds:",
+            "#   Minimum time between repeated zero-BSSID diagnostic captures.",
+            "#",
+            "# wlanreport_duration_days:",
+            "#   Used by: netsh wlan show wlanreport duration=N",
+            "#",
+            "# wlanreport_wait_seconds:",
+            "#   How long to wait for wlan-report-latest.html to be generated before copying it.",
+            "#",
+            "# Important:",
+            "# - Windows requires Administrator rights for netsh wlan show wlanreport.",
+            "# - Without Administrator rights, the script still captures interfaces.txt,",
+            "#   networks-bssid.txt, and drivers.txt, then skips the WLAN HTML report cleanly.",
+            "#",
+            "diagnostics_enabled=true",
+            "diagnostics_path=diagnostics",
+            "zero_bssid_diagnostics=true",
+            "zero_bssid_diagnostic_cooldown_seconds=300",
+            "wlanreport_duration_days=3",
+            "wlanreport_wait_seconds=90",
+            "",
+            "# ------------------------------------------------------------------------------",
+            "# AP COUNT CHANGE DEBOUNCE",
+            "# ------------------------------------------------------------------------------",
+            "# Windows can sometimes return partial scan results from:",
+            "#   netsh wlan show networks mode=bssid",
+            "#",
+            "# ap_count_debounce_samples:",
+            "#   Number of repeated samples required before logging an AP count change.",
+            "#   Higher value = less noisy AP_COUNT logs.",
+            "#",
+            "ap_count_debounce_samples=3"
         ) | Set-Content -Path $Path -Encoding UTF8
     }
 
@@ -23,8 +122,15 @@ function Read-WiFiRoamWatcherConfig {
         ap_alias_list      = ""
         log_path           = ""
         log_filename       = "wifi_roam_watcher.log"
-        log_rotation       = "true"
-        log_retention      = "1d"
+        log_rotation                             = "true"
+        log_retention                            = "1d"
+        diagnostics_enabled                      = "true"
+        diagnostics_path                         = "diagnostics"
+        zero_bssid_diagnostics                  = "true"
+        zero_bssid_diagnostic_cooldown_seconds  = "300"
+        wlanreport_duration_days                = "3"
+        wlanreport_wait_seconds                 = "90"
+        ap_count_debounce_samples               = "3"
     }
 
     $settings = @{}
@@ -70,8 +176,15 @@ function Read-WiFiRoamWatcherConfig {
         ap_alias_list      = $settings["ap_alias_list"]
         log_path           = $settings["log_path"]
         log_filename       = $settings["log_filename"]
-        log_rotation       = $settings["log_rotation"]
-        log_retention      = $settings["log_retention"]
+        log_rotation                            = $settings["log_rotation"]
+        log_retention                           = $settings["log_retention"]
+        diagnostics_enabled                     = $settings["diagnostics_enabled"]
+        diagnostics_path                        = $settings["diagnostics_path"]
+        zero_bssid_diagnostics                 = $settings["zero_bssid_diagnostics"]
+        zero_bssid_diagnostic_cooldown_seconds = $settings["zero_bssid_diagnostic_cooldown_seconds"]
+        wlanreport_duration_days               = $settings["wlanreport_duration_days"]
+        wlanreport_wait_seconds                = $settings["wlanreport_wait_seconds"]
+        ap_count_debounce_samples              = $settings["ap_count_debounce_samples"]
     }
 }
 
@@ -115,6 +228,35 @@ function Get-ConfigBoolean {
         "off"   { return $false }
         default  { return $DefaultValue }
     }
+}
+
+function Get-ConfigInteger {
+    param(
+        [string]$Value,
+        [int]$DefaultValue,
+        [int]$MinimumValue = 0,
+        [int]$MaximumValue = 2147483647
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return $DefaultValue
+    }
+
+    $parsed = 0
+
+    if (-not [int]::TryParse($Value.Trim(), [ref]$parsed)) {
+        return $DefaultValue
+    }
+
+    if ($parsed -lt $MinimumValue) {
+        return $MinimumValue
+    }
+
+    if ($parsed -gt $MaximumValue) {
+        return $MaximumValue
+    }
+
+    return $parsed
 }
 
 function Get-RetentionCutoff {
