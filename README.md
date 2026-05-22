@@ -217,7 +217,7 @@ In `config.cfg`:
 
 ```ini
 ap_alias_list_path=
-ap_alias_list=mst_exchange_aps.csv,ap_aliases.csv
+ap_alias_list=floor1_aps.csv,floor2_aps.csv
 ```
 
 `ap_alias_list_path=` is the folder containing alias CSV files. If empty, the script folder is used.
