@@ -69,7 +69,7 @@ Wi-Fi Roam Watcher\
 ├── README.md
 ├── TROUBLESHOOTING.md
 ├── VERSION.txt
-├── .gitignore
+├── ap_aliases.csv.example
 │
 └── modules\
     ├── WiFiRoamWatcher.Aliases.ps1
