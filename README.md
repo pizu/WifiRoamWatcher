@@ -32,6 +32,16 @@ For full WLAN HTML report collection, run PowerShell as Administrator.
 
 Press `CTRL+C` to stop.
 
+## Troubleshooting
+
+If PowerShell shows an error such as:
+
+```text
+Access to the path '.\Start-WiFiRoamWatcher.ps1' is denied.
+```
+
+see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+
 ## Startup options
 
 When the script starts, choose one of these options:
