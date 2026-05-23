@@ -67,7 +67,7 @@ Wi-Fi Roam Watcher\
 ├── Start-WiFiRoamWatcher.ps1
 ├── config.cfg
 ├── README.md
-├── RELEASE_NOTES_v1.1.txt
+├── TROUBLESHOOTING.md
 ├── VERSION.txt
 ├── .gitignore
 │
