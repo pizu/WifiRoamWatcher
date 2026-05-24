@@ -1,4 +1,4 @@
-# Wi-Fi Roam Watcher v1.1
+# Wi-Fi Roam Watcher v1.2
 
 Wi-Fi Roam Watcher is a Windows PowerShell tool for monitoring Wi-Fi roaming behaviour from a client laptop.
 
