@@ -42,6 +42,10 @@ Access to the path '.\Start-WiFiRoamWatcher.ps1' is denied.
 
 see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
+## Roadmap
+
+Future ideas and planned improvements are tracked in [ROADMAP.md](ROADMAP.md).
+
 ## Startup options
 
 When the script starts, choose one of these options:
