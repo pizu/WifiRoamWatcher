@@ -10,23 +10,31 @@ The v1.x series focuses on improving the current Windows PowerShell and `netsh w
 
 The goal is to keep v1.x simple, portable, easy to run, and useful for Wi-Fi roaming troubleshooting on Windows laptops.
 
+### Completed in v1.2
+
+- Improved Wi-Fi roaming visibility.
+- Improved RSSI visibility and logging.
+- Improved AP count change logging.
+- Improved logging format and readability.
+- Improved alias update readability.
+- Improved README and configuration examples.
+- Added manual GitHub Actions workflow trigger for validation.
+
 ### Planned / Under Consideration for v1.x
 
-- Improve Wi-Fi roaming visibility
-- Improve RSSI visibility and logging
-- Improve AP count change logging
-- Improve diagnostic bundle output
-- Improve logging format and readability
-- Improve startup messages and usability
-- Improve configuration examples
-- Improve README and troubleshooting documentation
+- Improve startup messages and usability.
+- Improve configuration examples.
+- Improve README and troubleshooting documentation.
+- Keep the current lightweight PowerShell workflow.
 
 ### Not Planned for v1.x
 
 The following items are not planned for the v1.x series:
 
-- Vendor-specific driver integration
-- Major architectural changes
+- Major architectural changes.
+- Vendor-specific driver integration.
+- New advanced wireless diagnostic engine.
+- New diagnostic bundle redesign.
 
 ## v2.x Ideas
 
@@ -34,21 +42,22 @@ The v2.x series may introduce deeper Windows wireless integration and larger int
 
 ### Under Consideration for v2.x
 
-- Deeper Windows wireless integration
-- Improved structured Wi-Fi data collection
-- Improved wireless data handling
-- Improved reporting beyond the current `netsh wlan` workflow
-- Possible architectural changes to support future features
+- Deeper Windows wireless integration.
+- Improved structured Wi-Fi data collection.
+- New advanced diagnostic output.
+- Improved wireless troubleshooting data.
+- Improved reporting beyond the current `netsh wlan` workflow.
+- Possible architectural changes to support future features.
 
 ## Future / Backlog
 
 These ideas may be considered later, but are not currently assigned to a specific version.
 
-- Additional troubleshooting views
-- Improved report exports
-- Better summary output
-- More flexible configuration options
-- Additional documentation and examples
+- Additional troubleshooting views.
+- Improved report exports.
+- Better summary output.
+- More flexible configuration options.
+- Additional documentation and examples.
 
 ## Notes
 
