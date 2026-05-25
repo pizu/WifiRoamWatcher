@@ -4,7 +4,18 @@ Wi-Fi Roam Watcher is a Windows PowerShell tool for monitoring Wi-Fi roaming beh
 
 It uses built-in Windows `netsh wlan` commands to track the connected SSID, AP/BSSID, optional AP aliases, signal, RSSI, channel, band, radio type, RX/TX rates, visible AP count, roaming events, disconnect/reconnect events, and client-side Wi-Fi diagnostic evidence.
 
-## What is new in v1.1
+## What is new in v1.2
+
+* Improved roaming event logging with clearer before/after AP, signal, RSSI, channel, and visible AP count context.
+* Improved signal-change logging with signal and RSSI deltas.
+* Improved AP count change logging with connected AP context.
+* Improved disconnect and reconnect logging with last-known AP details.
+* Improved alias update logging with `CONNECTED` and `VISIBLE` status.
+* Refreshed connected AP alias display after live alias updates.
+* Avoided logging the full local config file path at startup.
+* Kept the current PowerShell and `netsh wlan` workflow.
+
+## Previous v1.1 highlights
 
 - Added zero-BSSID handling for cases where Windows reports the connected AP/BSSID as `00:00:00:00:00:00`.
 - Added automatic diagnostic bundle creation when zero-BSSID is detected.
@@ -92,7 +103,7 @@ Default config:
 
 ```ini
 # ==============================================================================
-# Wi-Fi Roam Watcher v1.1 Configuration
+# Wi-Fi Roam Watcher v1.2 Configuration
 # ==============================================================================
 #
 # Notes:
