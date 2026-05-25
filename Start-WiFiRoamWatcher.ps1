@@ -82,6 +82,8 @@ $requiredFunctions = @(
     "Normalize-Bssid",
     "Test-ValidWifiBssid",
     "Format-Rssi",
+    "Format-WiFiRoamWatcherApLabel",
+    "Format-WiFiRoamWatcherDelta",
     "Get-LogTimestamp",
     "Write-WiFiRoamWatcherLog",
     "Select-WiFiRoamWatcherTargetSsid",
@@ -191,7 +193,12 @@ if ($monitorMode -ne "Auto" -and [string]::IsNullOrWhiteSpace($target)) {
     exit
 }
 
-Write-WiFiRoamWatcherLog -Path $logFile -Message "[$(Get-LogTimestamp)] STARTUP: Wi-Fi Roam Watcher v$scriptVersion | Mode: $monitorMode | Monitoring SSID [$target] | Config: $configFile"
+$configDisplayName = Split-Path -Path $configFile -Leaf
+if ([string]::IsNullOrWhiteSpace($configDisplayName)) {
+    $configDisplayName = "config.cfg"
+}
+
+Write-WiFiRoamWatcherLog -Path $logFile -Message "[$(Get-LogTimestamp)] STARTUP: Wi-Fi Roam Watcher v$scriptVersion | Mode: $monitorMode | Monitoring SSID [$target] | Config: $configDisplayName"
 
 # ------------------------------------------------------------
 # Main monitor loop
@@ -374,11 +381,35 @@ while ($true) {
                 continue
             }
 
-            $aliasBssid = ([string]$node.BSSID).ToLower()
+            $aliasBssid = Normalize-Bssid -Text ([string]$node.BSSID)
+
+            if ([string]::IsNullOrWhiteSpace($aliasBssid)) {
+                continue
+            }
+
             $newAlias = ""
 
             if ($node.Alias) {
                 $newAlias = ([string]$node.Alias).Trim()
+            }
+
+            $aliasStatus = "VISIBLE"
+            if ($node.Status) {
+                $aliasStatus = ([string]$node.Status).Trim().ToUpper()
+            }
+
+            $currentInterfaceBssidForAlias = Normalize-Bssid -Text ([string]$interfaceInfo.BSSID)
+            $lastBssidForAlias = Normalize-Bssid -Text ([string]$global:lastBssid)
+
+            if (-not [string]::IsNullOrWhiteSpace($currentInterfaceBssidForAlias) -and $aliasBssid -eq $currentInterfaceBssidForAlias) {
+                $aliasStatus = "CONNECTED"
+            }
+            elseif ([string]::IsNullOrWhiteSpace($aliasStatus)) {
+                $aliasStatus = "VISIBLE"
+            }
+
+            if ($aliasStatus -ne "CONNECTED") {
+                $aliasStatus = "VISIBLE"
             }
 
             $oldAlias = ""
@@ -390,13 +421,25 @@ while ($true) {
 
             if ($global:aliasBaselineReady -and $hasKnownAliasState) {
                 if ([string]::IsNullOrWhiteSpace($oldAlias) -and -not [string]::IsNullOrWhiteSpace($newAlias)) {
-                    Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] ALIAS_UPDATE: BSSID $aliasBssid now has alias [$newAlias] | SSID: $($node.SSID) | Signal: $($node.Signal)% | Chan: $($node.Channel) | Status: $($node.Status)"
+                    Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] ALIAS_UPDATE: BSSID $aliasBssid now has alias [$newAlias] | SSID: $($node.SSID) | Signal: $($node.Signal)% | Chan: $($node.Channel) | Status: $aliasStatus"
                 }
                 elseif (-not [string]::IsNullOrWhiteSpace($oldAlias) -and -not [string]::IsNullOrWhiteSpace($newAlias) -and $oldAlias -ne $newAlias) {
-                    Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] ALIAS_UPDATE: BSSID $aliasBssid alias changed from [$oldAlias] to [$newAlias] | SSID: $($node.SSID) | Signal: $($node.Signal)% | Chan: $($node.Channel) | Status: $($node.Status)"
+                    Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] ALIAS_UPDATE: BSSID $aliasBssid alias changed from [$oldAlias] to [$newAlias] | SSID: $($node.SSID) | Signal: $($node.Signal)% | Chan: $($node.Channel) | Status: $aliasStatus"
                 }
                 elseif (-not [string]::IsNullOrWhiteSpace($oldAlias) -and [string]::IsNullOrWhiteSpace($newAlias)) {
-                    Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] ALIAS_UPDATE: BSSID $aliasBssid alias removed. Previous alias was [$oldAlias] | SSID: $($node.SSID) | Signal: $($node.Signal)% | Chan: $($node.Channel) | Status: $($node.Status)"
+                    Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] ALIAS_UPDATE: BSSID $aliasBssid alias removed. Previous alias was [$oldAlias] | SSID: $($node.SSID) | Signal: $($node.Signal)% | Chan: $($node.Channel) | Status: $aliasStatus"
+                }
+            }
+
+            $aliasMatchesLastBssid = (-not [string]::IsNullOrWhiteSpace($lastBssidForAlias) -and $aliasBssid -eq $lastBssidForAlias)
+            $aliasMatchesCurrentInterface = (-not [string]::IsNullOrWhiteSpace($currentInterfaceBssidForAlias) -and $aliasBssid -eq $currentInterfaceBssidForAlias)
+
+            if ($aliasMatchesLastBssid -or $aliasMatchesCurrentInterface) {
+                if ([string]::IsNullOrWhiteSpace($newAlias)) {
+                    $global:lastAlias = "No Alias"
+                }
+                else {
+                    $global:lastAlias = $newAlias
                 }
             }
 
@@ -433,7 +476,7 @@ while ($true) {
                 $global:lastConnectedSsid = $interfaceInfo.SSID
             }
             else {
-                Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] START: Not connected to monitored SSID | Mode: $monitorMode | Current SSID: $($interfaceInfo.SSID) | State: $($interfaceInfo.State) | Monitoring SSID: $target | Visible APs: $apCount"
+                Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] START: Not connected | Mode: $monitorMode | Monitoring SSID: $target | Current SSID: $($interfaceInfo.SSID) | State: $($interfaceInfo.State) | Visible APs: $apCount"
 
                 $global:lastConnectionState = "disconnected"
                 $global:lastConnectedSsid = "UNKNOWN"
@@ -441,7 +484,8 @@ while ($true) {
             }
         }
         elseif ($global:lastConnectionState -eq "connected" -and -not $currentIsConnectedToTarget) {
-            Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] DISCONNECTED: Lost connection to monitored SSID | Mode: $monitorMode | Previous SSID: $global:lastConnectedSsid | Previous AP: $global:lastBssid [$global:lastAlias] | Last Signal: $global:lastSignal% | Last RSSI: $(Format-Rssi -Rssi $global:lastRssi) | Last Chan: $global:lastChannel | Last visible AP count: $global:lastApCount | Current SSID: $($interfaceInfo.SSID) | Current State: $($interfaceInfo.State) | Monitoring SSID: $target"
+            $lastApLabel = Format-WiFiRoamWatcherApLabel -Bssid $global:lastBssid -Alias $global:lastAlias
+            Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] DISCONNECTED: SSID: $global:lastConnectedSsid | Last AP: $lastApLabel | Last Signal: $global:lastSignal% | Last RSSI: $(Format-Rssi -Rssi $global:lastRssi) | Last Chan: $global:lastChannel | Last visible APs: $global:lastApCount | Current SSID: $($interfaceInfo.SSID) | Current State: $($interfaceInfo.State) | Monitoring SSID: $target | Mode: $monitorMode"
 
             $global:lastConnectionState = "disconnected"
             $skipConnectedChangeLog = $true
@@ -466,14 +510,18 @@ while ($true) {
                 }
             }
 
-            Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] RECONNECTED: Connected to monitored SSID $($interfaceInfo.SSID) | Mode: $monitorMode | AP: $($interfaceInfo.BSSID) [$reconnectAlias] | Signal: $($interfaceInfo.Signal)% | RSSI: $(Format-Rssi -Rssi $interfaceInfo.RSSI) | Chan: $($interfaceInfo.Channel) | Previous AP before disconnect: $previousBssid [$previousAlias] | Previous Signal: $previousSignal% | Previous RSSI: $(Format-Rssi -Rssi $previousRssi) | Previous Chan: $previousChannel | Visible APs: $apCount"
+            $reconnectApLabel = Format-WiFiRoamWatcherApLabel -Bssid $interfaceInfo.BSSID -Alias $reconnectAlias
+            $previousApLabel = Format-WiFiRoamWatcherApLabel -Bssid $previousBssid -Alias $previousAlias
+            $reconnectSignalDelta = Format-WiFiRoamWatcherDelta -OldValue $previousSignal -NewValue $interfaceInfo.Signal -Unit "%"
+            $reconnectRssiDelta = Format-WiFiRoamWatcherDelta -OldValue $previousRssi -NewValue $interfaceInfo.RSSI -Unit " dB"
+            Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] RECONNECTED: SSID: $($interfaceInfo.SSID) | AP: $reconnectApLabel | Signal: $($interfaceInfo.Signal)% | RSSI: $(Format-Rssi -Rssi $interfaceInfo.RSSI) | Chan: $($interfaceInfo.Channel) | Previous AP before disconnect: $previousApLabel | Previous Signal: $previousSignal% | Previous RSSI: $(Format-Rssi -Rssi $previousRssi) | Previous Chan: $previousChannel | Delta: Signal $reconnectSignalDelta | RSSI $reconnectRssiDelta | Visible APs: $apCount | Mode: $monitorMode"
 
             $global:lastConnectionState = "connected"
             $global:lastConnectedSsid = $interfaceInfo.SSID
 
             if ($connectedNode) {
                 $global:lastBssid = $connectedNode.BSSID
-                $global:lastAlias = if ($connectedNode.Alias) { $connectedNode.Alias } else { "No Alias" }
+                $global:lastAlias = $reconnectAlias
                 $global:lastSignal = $connectedNode.Signal
                 $global:lastRssi = $interfaceInfo.RSSI
                 $global:lastChannel = $connectedNode.Channel
@@ -499,13 +547,26 @@ while ($true) {
         # ------------------------------------------------------------
         if ($currentIsConnectedToTarget -and $connectedNode -and -not $skipConnectedChangeLog) {
             $thisMac = $connectedNode.BSSID
-            $thisAlias = if ($connectedNode.Alias) { $connectedNode.Alias } else { "No Alias" }
+            $thisAlias = "No Alias"
+
+            if ($connectedNode.Alias) {
+                $thisAlias = $connectedNode.Alias
+            }
+            else {
+                $aliasFromConnectedNode = Get-ApAlias -Bssid $thisMac -Aliases $apAliases
+
+                if (-not [string]::IsNullOrWhiteSpace($aliasFromConnectedNode)) {
+                    $thisAlias = $aliasFromConnectedNode
+                }
+            }
+
             $thisSig = $connectedNode.Signal
             $thisRssi = $interfaceInfo.RSSI
             $thisChannel = $connectedNode.Channel
 
             if ($global:lastBssid -eq "NONE") {
-                Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] START: Current connection $thisMac [$thisAlias] | Mode: $monitorMode | SSID: $($interfaceInfo.SSID) | Signal: $thisSig% | RSSI: $(Format-Rssi -Rssi $thisRssi) | Chan: $thisChannel | APs seen: $apCount"
+                $currentApLabel = Format-WiFiRoamWatcherApLabel -Bssid $thisMac -Alias $thisAlias
+                Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] START: SSID: $($interfaceInfo.SSID) | AP: $currentApLabel | Signal: $thisSig% | RSSI: $(Format-Rssi -Rssi $thisRssi) | Chan: $thisChannel | Visible APs: $apCount | Mode: $monitorMode"
 
                 $global:lastBssid = $thisMac
                 $global:lastAlias = $thisAlias
@@ -515,7 +576,11 @@ while ($true) {
                 $global:lastConnectedSsid = $interfaceInfo.SSID
             }
             elseif ($thisMac -ne $global:lastBssid) {
-                Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] ROAMED: From $global:lastBssid [$global:lastAlias] | Signal: $global:lastSignal% | RSSI: $(Format-Rssi -Rssi $global:lastRssi) | Chan: $global:lastChannel -> To $thisMac [$thisAlias] | Mode: $monitorMode | SSID: $($interfaceInfo.SSID) | Signal: $thisSig% | RSSI: $(Format-Rssi -Rssi $thisRssi) | Chan: $thisChannel | APs seen: $apCount"
+                $previousApLabel = Format-WiFiRoamWatcherApLabel -Bssid $global:lastBssid -Alias $global:lastAlias
+                $currentApLabel = Format-WiFiRoamWatcherApLabel -Bssid $thisMac -Alias $thisAlias
+                $roamSignalDelta = Format-WiFiRoamWatcherDelta -OldValue $global:lastSignal -NewValue $thisSig -Unit "%"
+                $roamRssiDelta = Format-WiFiRoamWatcherDelta -OldValue $global:lastRssi -NewValue $thisRssi -Unit " dB"
+                Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] ROAMED: SSID: $($interfaceInfo.SSID) | From: $previousApLabel | Signal: $global:lastSignal% | RSSI: $(Format-Rssi -Rssi $global:lastRssi) | Chan: $global:lastChannel | To: $currentApLabel | Signal: $thisSig% | RSSI: $(Format-Rssi -Rssi $thisRssi) | Chan: $thisChannel | Delta: Signal $roamSignalDelta | RSSI $roamRssiDelta | Visible APs: $apCount | Mode: $monitorMode"
 
                 $global:lastBssid = $thisMac
                 $global:lastAlias = $thisAlias
@@ -541,7 +606,10 @@ while ($true) {
                 }
 
                 if ($signalChanged -or $rssiChanged) {
-                    Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] SIGNAL: Current $thisMac [$thisAlias] | Mode: $monitorMode | SSID: $($interfaceInfo.SSID) | From $global:lastSignal% / $(Format-Rssi -Rssi $global:lastRssi) to $thisSig% / $(Format-Rssi -Rssi $thisRssi) | Chan: $thisChannel | APs seen: $apCount"
+                    $currentApLabel = Format-WiFiRoamWatcherApLabel -Bssid $thisMac -Alias $thisAlias
+                    $signalDelta = Format-WiFiRoamWatcherDelta -OldValue $global:lastSignal -NewValue $thisSig -Unit "%"
+                    $rssiDelta = Format-WiFiRoamWatcherDelta -OldValue $global:lastRssi -NewValue $thisRssi -Unit " dB"
+                    Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] SIGNAL: SSID: $($interfaceInfo.SSID) | AP: $currentApLabel | Signal: $global:lastSignal% -> $thisSig% ($signalDelta) | RSSI: $(Format-Rssi -Rssi $global:lastRssi) -> $(Format-Rssi -Rssi $thisRssi) ($rssiDelta) | Chan: $thisChannel | Visible APs: $apCount | Mode: $monitorMode"
 
                     $global:lastAlias = $thisAlias
                     $global:lastSignal = $thisSig
@@ -578,7 +646,9 @@ while ($true) {
                 }
 
                 if ($global:pendingApCountSeen -ge $apCountDebounceSamples) {
-                    Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] AP_COUNT: Visible AP count changed from $global:lastApCount to $apCount while connected to $target"
+                    $currentApLabel = Format-WiFiRoamWatcherApLabel -Bssid $global:lastBssid -Alias $global:lastAlias
+                    $apCountDelta = Format-WiFiRoamWatcherDelta -OldValue $global:lastApCount -NewValue $apCount -Unit ""
+                    Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] AP_COUNT: SSID: $target | Visible APs: $global:lastApCount -> $apCount ($apCountDelta) | Connected AP: $currentApLabel | Signal: $global:lastSignal% | RSSI: $(Format-Rssi -Rssi $global:lastRssi) | Chan: $global:lastChannel | Mode: $monitorMode"
 
                     $global:lastApCount = $apCount
                     $global:pendingApCount = $null

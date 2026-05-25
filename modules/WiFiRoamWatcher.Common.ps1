@@ -53,6 +53,58 @@ function Format-Rssi {
     return "$Rssi dBm"
 }
 
+
+function Format-WiFiRoamWatcherApLabel {
+    param(
+        [string]$Bssid,
+        [string]$Alias
+    )
+
+    $cleanBssid = "UNKNOWN"
+    if (-not [string]::IsNullOrWhiteSpace($Bssid)) {
+        $cleanBssid = $Bssid.Trim()
+    }
+
+    $cleanAlias = "No Alias"
+    if (-not [string]::IsNullOrWhiteSpace($Alias)) {
+        $cleanAlias = $Alias.Trim()
+    }
+
+    return "$cleanBssid [$cleanAlias]"
+}
+
+function Format-WiFiRoamWatcherDelta {
+    param(
+        [object]$OldValue,
+        [object]$NewValue,
+        [string]$Unit = ""
+    )
+
+    if ($null -eq $OldValue -or $null -eq $NewValue) {
+        return "Unknown"
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$OldValue) -or [string]::IsNullOrWhiteSpace([string]$NewValue)) {
+        return "Unknown"
+    }
+
+    try {
+        $oldNumber = [int]$OldValue
+        $newNumber = [int]$NewValue
+    }
+    catch {
+        return "Unknown"
+    }
+
+    $delta = $newNumber - $oldNumber
+
+    if ($delta -gt 0) {
+        return "+$delta$Unit"
+    }
+
+    return "$delta$Unit"
+}
+
 function Get-LogTimestamp {
     return (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 }
