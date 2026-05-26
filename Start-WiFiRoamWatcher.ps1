@@ -134,6 +134,17 @@ Invoke-WiFiRoamWatcherLogMaintenance `
     -RotationEnabled $logRotationEnabled `
     -RetentionSpec $config.log_retention
 
+# ------------------------------------------------------------
+# Main loop refresh setting
+# ------------------------------------------------------------
+# refresh_interval_seconds controls how often the script refreshes Wi-Fi data.
+# The value is re-read while the script runs, so it can be changed without restarting.
+$refreshIntervalSeconds = Get-ConfigInteger `
+    -Value $config.refresh_interval_seconds `
+    -DefaultValue 2 `
+    -MinimumValue 1 `
+    -MaximumValue 300
+
 $aliasFiles = Get-AliasFilesFromConfig `
     -AliasListPath $aliasFolder `
     -AliasList $config.ap_alias_list
@@ -239,6 +250,18 @@ while ($true) {
         $wlanReportDurationDays = Get-ConfigInteger -Value $config.wlanreport_duration_days -DefaultValue 3 -MinimumValue 1 -MaximumValue 30
         $wlanReportWaitSeconds = Get-ConfigInteger -Value $config.wlanreport_wait_seconds -DefaultValue 90 -MinimumValue 5 -MaximumValue 600
         $apCountDebounceSamples = Get-ConfigInteger -Value $config.ap_count_debounce_samples -DefaultValue 3 -MinimumValue 1 -MaximumValue 100
+
+        # Refresh interval is re-read every loop so timing changes apply without restarting.
+        $previousRefreshIntervalSeconds = $refreshIntervalSeconds
+        $refreshIntervalSeconds = Get-ConfigInteger `
+            -Value $config.refresh_interval_seconds `
+            -DefaultValue 2 `
+            -MinimumValue 1 `
+            -MaximumValue 300
+
+        if ($refreshIntervalSeconds -ne $previousRefreshIntervalSeconds) {
+            Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] CONFIG: refresh_interval_seconds changed from $previousRefreshIntervalSeconds to $refreshIntervalSeconds"
+        }
 
         # Alias settings are re-read every loop so CSV changes can be picked up without restarting.
         $aliasFolder = Resolve-WiFiRoamWatcherPath -ConfiguredPath $config.ap_alias_list_path -DefaultPath $scriptFolder
@@ -690,5 +713,5 @@ while ($true) {
         Write-Host "Log file: $logFile" -ForegroundColor DarkGray
     }
 
-    Start-Sleep -Seconds 2
+    Start-Sleep -Seconds $refreshIntervalSeconds
 }

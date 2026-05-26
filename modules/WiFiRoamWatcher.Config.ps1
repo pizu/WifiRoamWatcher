@@ -7,7 +7,7 @@ function Read-WiFiRoamWatcherConfig {
     if (-not (Test-Path $Path)) {
         @(
             "# ==============================================================================",
-            "# Wi-Fi Roam Watcher v1.1 Configuration",
+            "# Wi-Fi Roam Watcher v1.2 Configuration",
             "# ==============================================================================",
             "#",
             "# Notes:",
@@ -37,10 +37,10 @@ function Read-WiFiRoamWatcherConfig {
             "#",
             "# Examples:",
             "#   ap_alias_list=ap_aliases.csv",
-            "#   ap_alias_list=mst_exchange_aps.csv,ap_aliases.csv",
+            "#   ap_alias_list=ap_aliases.csv",
             "#",
             "ap_alias_list_path=",
-            "ap_alias_list=mst_exchange_aps.csv,ap_aliases.csv",
+            "ap_alias_list=ap_aliases.csv",
             "",
             "# ------------------------------------------------------------------------------",
             "# LOGGING",
@@ -104,6 +104,17 @@ function Read-WiFiRoamWatcherConfig {
             "wlanreport_wait_seconds=90",
             "",
             "# ------------------------------------------------------------------------------",
+            "# REFRESH INTERVAL",
+            "# ------------------------------------------------------------------------------",
+            "# refresh_interval_seconds:",
+            "#   How often the script refreshes Wi-Fi data and updates the screen.",
+            "#   Lower value = faster updates, but more netsh calls.",
+            "#   Higher value = quieter/lighter polling, but slower event detection.",
+            "#   Supported range: 1 to 300 seconds.",
+            "#",
+            "refresh_interval_seconds=2",
+            "",
+            "# ------------------------------------------------------------------------------",
             "# AP COUNT CHANGE DEBOUNCE",
             "# ------------------------------------------------------------------------------",
             "# Windows can sometimes return partial scan results from:",
@@ -131,6 +142,7 @@ function Read-WiFiRoamWatcherConfig {
         wlanreport_duration_days                = "3"
         wlanreport_wait_seconds                 = "90"
         ap_count_debounce_samples               = "3"
+        refresh_interval_seconds                = "2"
     }
 
     $settings = @{}
@@ -185,6 +197,7 @@ function Read-WiFiRoamWatcherConfig {
         wlanreport_duration_days               = $settings["wlanreport_duration_days"]
         wlanreport_wait_seconds                = $settings["wlanreport_wait_seconds"]
         ap_count_debounce_samples              = $settings["ap_count_debounce_samples"]
+        refresh_interval_seconds               = $settings["refresh_interval_seconds"]
     }
 }
 
