@@ -1,0 +1,29 @@
+# Dependabot configuration for Wi-Fi Roam Watcher
+#
+# This repository is mainly PowerShell, so Dependabot is used here
+# to keep GitHub Actions versions up to date.
+
+version: 2
+
+updates:
+  # Keep GitHub Actions used in .github/workflows updated.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      time: "09:00"
+      timezone: "Europe/Malta"
+
+    # Keep noise low for a small project.
+    open-pull-requests-limit: 3
+
+    # Add useful labels to Dependabot PRs.
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+    # Make Dependabot commit messages easy to identify.
+    commit-message:
+      prefix: "chore"
+      include: "scope"
