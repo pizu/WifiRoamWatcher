@@ -6,14 +6,16 @@ It uses built-in Windows `netsh wlan` commands to track the connected SSID, AP/B
 
 ## What is new in v1.2
 
-* Improved roaming event logging with clearer before/after AP, signal, RSSI, channel, and visible AP count context.
-* Improved signal-change logging with signal and RSSI deltas.
-* Improved AP count change logging with connected AP context.
-* Improved disconnect and reconnect logging with last-known AP details.
-* Improved alias update logging with `CONNECTED` and `VISIBLE` status.
-* Refreshed connected AP alias display after live alias updates.
-* Avoided logging the full local config file path at startup.
-* Kept the current PowerShell and `netsh wlan` workflow.
+- Improved roaming event logging with clearer before/after AP, signal, RSSI, channel, and visible AP count context.
+- Improved signal-change logging with signal and RSSI deltas.
+- Improved AP count change logging with connected AP context.
+- Improved disconnect and reconnect logging with last-known AP details.
+- Improved alias update logging with `CONNECTED` and `VISIBLE` status.
+- Refreshed connected AP alias display after live alias updates.
+- Avoided logging the full local config file path at startup.
+- Added `refresh_interval_seconds` so the monitor loop refresh interval can be configured.
+- Added logging when `refresh_interval_seconds` is changed while the script is running.
+- Kept the current PowerShell and `netsh wlan` workflow.
 
 ## Previous v1.1 highlights
 
@@ -82,6 +84,7 @@ Wi-Fi Roam Watcher\
 ├── Start-WiFiRoamWatcher.ps1
 ├── config.cfg
 ├── README.md
+├── ROADMAP.md
 ├── TROUBLESHOOTING.md
 ├── VERSION.txt
 ├── ap_aliases.csv.example
@@ -163,6 +166,22 @@ log_rotation=true
 log_retention=1d
 
 # ------------------------------------------------------------------------------
+# REFRESH INTERVAL
+# ------------------------------------------------------------------------------
+# refresh_interval_seconds:
+#   How often the monitor loop refreshes Wi-Fi status.
+#   Lower values react faster but run netsh more often.
+#   Higher values are quieter and lighter.
+#
+# Notes:
+# - Default is 2 seconds.
+# - Minimum accepted value is 1 second.
+# - This setting is re-read while the script is running.
+# - When changed, a CONFIG event is written to the log.
+#
+refresh_interval_seconds=2
+
+# ------------------------------------------------------------------------------
 # DIAGNOSTIC CAPTURE
 # ------------------------------------------------------------------------------
 # diagnostics_enabled:
@@ -233,6 +252,25 @@ log_retention=1w
 log_retention=1m
 ```
 
+### Refresh interval setting
+
+`refresh_interval_seconds=` controls how often Wi-Fi Roam Watcher refreshes the current Wi-Fi state.
+
+The default is:
+
+```ini
+refresh_interval_seconds=2
+```
+
+A lower value reacts faster to roaming, disconnects, reconnects, signal changes, and AP count changes, but it runs the Windows `netsh` checks more often.
+
+A higher value is lighter and quieter, but changes may be detected slightly later.
+
+The setting is re-read while the script is running. If the value changes, the script logs a `CONFIG` event similar to:
+
+```text
+[2026-05-25 22:10:00] CONFIG: refresh_interval_seconds changed from 2 to 5
+```
 
 ## AP aliases
 
@@ -242,7 +280,7 @@ In `config.cfg`:
 
 ```ini
 ap_alias_list_path=
-ap_alias_list=floor1_aps.csv,floor2_aps.csv
+ap_alias_list=ap_aliases.csv
 ```
 
 `ap_alias_list_path=` is the folder containing alias CSV files. If empty, the script folder is used.
@@ -253,11 +291,18 @@ CSV format:
 
 ```csv
 Match,Alias
-24:71:21:89:1c:ef,ZTN-D-C1A-F1-17
-89:1c,ZTN-D-C1A-F1-17
+24:71:21:89:1c:ef,Example-AP-Name
+89:1c,Example-AP-Name
 ```
 
 `Match` can be a full BSSID or a partial BSSID fragment. Alias files are reloaded while the script runs, and alias changes are logged as `ALIAS_UPDATE`.
+
+When aliases are updated while the script is running, v1.2 logs whether the BSSID is currently connected or only visible:
+
+```text
+[2026-05-25 21:57:31] ALIAS_UPDATE: BSSID 00:a7:42:f5:5e:2f now has alias [Example-AP-Name] | SSID: MySSID | Signal: 95% | Chan: 100 | Status: VISIBLE
+[2026-05-25 21:57:31] ALIAS_UPDATE: BSSID f0:7f:06:cd:30:4f now has alias [Example-AP-Name-2] | SSID: MySSID | Signal: 94% | Chan: 132 | Status: CONNECTED
+```
 
 ## Zero-BSSID diagnostics
 
@@ -387,6 +432,7 @@ RECONNECTED   Client reconnected to the monitored SSID.
 AUTO_SSID     Auto mode changed the monitored SSID.
 AP_COUNT      Visible AP count changed while connected.
 ALIAS_UPDATE  AP alias was added, changed, or removed while visible.
+CONFIG        Runtime configuration value changed.
 DIAG          Diagnostic capture started or completed.
 DIAG_WARN     Diagnostic capture completed with a warning.
 DIAG_ERROR    Diagnostic capture failed.
@@ -395,6 +441,32 @@ INFO          Invalid/pending connected BSSID recovered.
 LOG_ROTATE    Log file was rotated.
 LOG_RETENTION Old rotated log file was deleted.
 ERROR         Script caught an error but continued running.
+```
+
+## Example v1.2 log entries
+
+Roaming event:
+
+```text
+[2026-05-25 21:41:54] ROAMED: SSID: MySSID | From: 00:a7:42:f5:5e:2f [Example-AP-Name] | Signal: 95% | RSSI: -38 dBm | Chan: 100 | To: f0:7f:06:cd:30:4f [Example-AP-Name-2] | Signal: 99% | RSSI: -40 dBm | Chan: 132 | Delta: Signal +4% | RSSI -2 dB | Visible APs: 2 | Mode: Auto
+```
+
+Signal/RSSI change event:
+
+```text
+[2026-05-25 21:44:22] SIGNAL: SSID: MySSID | AP: f0:7f:06:cd:30:4f [Example-AP-Name-2] | Signal: 99% -> 94% (-5%) | RSSI: -40 dBm -> -46 dBm (-6 dB) | Chan: 132 | Visible APs: 1 | Mode: Auto
+```
+
+AP count change event:
+
+```text
+[2026-05-25 21:59:08] AP_COUNT: SSID: MySSID | Visible APs: 2 -> 1 (-1) | Connected AP: f0:7f:06:cd:30:4f [Example-AP-Name-2] | Signal: 94% | RSSI: -38 dBm | Chan: 132 | Mode: Auto
+```
+
+Reconnect event:
+
+```text
+[2026-05-25 21:41:24] RECONNECTED: SSID: MySSID | AP: 00:a7:42:f5:5e:2f [Example-AP-Name] | Signal: 99% | RSSI: -38 dBm | Chan: 100 | Previous AP before disconnect: 00:a7:42:f5:5e:2f [Example-AP-Name] | Previous Signal: 95% | Previous RSSI: -37 dBm | Previous Chan: 100 | Delta: Signal +4% | RSSI -1 dB | Visible APs: 2 | Mode: Auto
 ```
 
 ## Netsh commands used
@@ -437,10 +509,12 @@ Important: real RSSI is only taken from `netsh wlan show interfaces all` for the
 1. Extract the folder.
 2. Run `Start-WiFiRoamWatcher.ps1` using the command above.
 3. Select option 1, 2, or 3.
-4. Optionally configure logging and diagnostics in `config.cfg`.
+4. Optionally configure logging, refresh interval, AP aliases, and diagnostics in `config.cfg`.
 5. Check `wifi_roam_watcher.log` for events.
 6. If zero-BSSID happens, check the generated folder under `diagnostics\`.
 
 ## Privacy note
 
 The WLAN HTML report can contain computer names, usernames, domain details, saved Wi-Fi profiles, certificate information, IP configuration, and other environment details. Review or sanitize the report before sharing it externally.
+
+Wi-Fi Roam Watcher v1.2 also avoids logging the full local config file path during startup.
