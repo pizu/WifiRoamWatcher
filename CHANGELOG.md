@@ -2,6 +2,19 @@
 
 All notable changes to Wi-Fi Roam Watcher are documented in this file.
 
+## v1.2.1
+
+### Fixed
+
+- Reduced noisy AP count change logs caused by fallback-only scan results.
+- Reset AP count baseline cleanly after reconnect when Windows only returns the connected-interface fallback.
+- Fixed roam logging so the `From:` AP keeps the previous BSSID alias instead of showing the new AP alias.
+- Preferred live connected-interface signal and channel values for connected AP logging and display when available.
+
+### Notes
+
+- Patch release based on v1.2.
+
 ## v1.2
 
 ### Added

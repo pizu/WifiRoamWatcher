@@ -4,7 +4,7 @@ Wi-Fi Roam Watcher is a Windows PowerShell tool for monitoring Wi-Fi roaming beh
 
 It uses built-in Windows `netsh wlan` commands to show the current Wi-Fi connection, track roaming between BSSIDs/APs, log signal and RSSI changes, detect disconnect/reconnect events, and optionally collect diagnostic evidence.
 
-Current version: **v1.2**
+Current version: **v1.2.1**
 
 ## Features
 

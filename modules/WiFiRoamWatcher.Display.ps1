@@ -70,7 +70,19 @@ function Show-WiFiRoamWatcherScreen {
     if ($connectedNode) {
         $currentAlias = if ($connectedNode.Alias) { $connectedNode.Alias } else { "No Alias" }
 
-        Write-Host "Current Connected MAC: $($connectedNode.BSSID) [$currentAlias] ($($connectedNode.Signal)%, RSSI: $(Format-Rssi -Rssi $InterfaceInfo.RSSI)) Chan: $($connectedNode.Channel)" -ForegroundColor Green
+        # For the connected AP summary, use live interface signal/channel values
+        # when available. Scan-table values can be stale or partial.
+        $currentConnectedSignal = $InterfaceInfo.Signal
+        if ($null -eq $currentConnectedSignal) {
+            $currentConnectedSignal = $connectedNode.Signal
+        }
+
+        $currentConnectedChannel = $InterfaceInfo.Channel
+        if ([string]::IsNullOrWhiteSpace([string]$currentConnectedChannel) -or $currentConnectedChannel -eq "UNKNOWN") {
+            $currentConnectedChannel = $connectedNode.Channel
+        }
+
+        Write-Host "Current Connected MAC: $($connectedNode.BSSID) [$currentAlias] ($currentConnectedSignal%, RSSI: $(Format-Rssi -Rssi $InterfaceInfo.RSSI)) Chan: $currentConnectedChannel" -ForegroundColor Green
     }
     elseif ($InterfaceInfo.State -ieq "connected" -and -not (Test-ValidWifiBssid -Bssid $InterfaceInfo.BSSID)) {
         Write-Host "Current Connected MAC: pending/invalid from Windows: $($InterfaceInfo.BSSID)" -ForegroundColor DarkYellow

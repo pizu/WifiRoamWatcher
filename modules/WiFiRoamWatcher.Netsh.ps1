@@ -138,6 +138,7 @@ function Get-VisibleWifiBssids {
                         Signal  = $currentSignal
                         Channel = $channel
                         Status  = $status
+                        Source  = "SCAN"
                     }
                 }
             }
@@ -158,6 +159,7 @@ function Get-VisibleWifiBssids {
             Signal  = $ActiveSignal
             Channel = $ActiveChannel
             Status  = "CONNECTED"
+            Source  = "INTERFACE_FALLBACK"
         }
     }
 

@@ -321,7 +321,19 @@ while ($true) {
         }
 
         # Count visible APs.
+        #
+        # If netsh does not return the connected BSSID in the scan list,
+        # Get-VisibleWifiBssids adds the active interface BSSID as a fallback
+        # so the screen can still show the connected AP. That fallback is useful
+        # for display, but it is not a reliable visible-AP scan result.
+        # Without this reliability flag, fallback-only scans appear as "1 visible AP"
+        # and can create noisy AP_COUNT logs such as 10 -> 1 -> 10.
         $apCount = @($allNodes).Count
+        $fallbackOnlyApCount = (
+            $apCount -eq 1 -and
+            @($allNodes | Where-Object { $_.Source -eq "INTERFACE_FALLBACK" }).Count -eq 1
+        )
+        $apCountIsReliable = (-not $fallbackOnlyApCount)
 
         # Current timestamp for logs.
         $timestamp = Get-LogTimestamp
@@ -457,7 +469,12 @@ while ($true) {
             $aliasMatchesLastBssid = (-not [string]::IsNullOrWhiteSpace($lastBssidForAlias) -and $aliasBssid -eq $lastBssidForAlias)
             $aliasMatchesCurrentInterface = (-not [string]::IsNullOrWhiteSpace($currentInterfaceBssidForAlias) -and $aliasBssid -eq $currentInterfaceBssidForAlias)
 
-            if ($aliasMatchesLastBssid -or $aliasMatchesCurrentInterface) {
+            # Only refresh the remembered alias for the previously logged BSSID here.
+            # Do not update $global:lastAlias from the current interface BSSID before
+            # the roam block runs. During a roam, the current interface may already be
+            # the new AP while $global:lastBssid is still the old AP. Updating the alias
+            # too early makes the ROAMED "From:" AP show the new AP alias.
+            if ($aliasMatchesLastBssid) {
                 if ([string]::IsNullOrWhiteSpace($newAlias)) {
                     $global:lastAlias = "No Alias"
                 }
@@ -557,9 +574,14 @@ while ($true) {
                 $global:lastChannel = $interfaceInfo.Channel
             }
 
-            # Reset AP-count baseline after reconnect so we do not log noisy 0 -> N changes.
-            if ($apCount -gt 0) {
+            # Reset AP-count baseline after reconnect only when the scan count is reliable.
+            # If the current count is only the connected-interface fallback, reset the
+            # baseline so the next reliable scan can establish a clean AP count.
+            if ($apCount -gt 0 -and $apCountIsReliable) {
                 $global:lastApCount = $apCount
+            }
+            elseif (-not $apCountIsReliable) {
+                $global:lastApCount = -1
             }
 
             $skipConnectedChangeLog = $true
@@ -583,9 +605,20 @@ while ($true) {
                 }
             }
 
-            $thisSig = $connectedNode.Signal
+            # For the connected AP, prefer the live interface values.
+            # netsh scan signal values can be stale or partial, which can create
+            # confusing logs such as Signal 99% with RSSI -74 dBm.
+            $thisSig = $interfaceInfo.Signal
+            if ($null -eq $thisSig) {
+                $thisSig = $connectedNode.Signal
+            }
+
             $thisRssi = $interfaceInfo.RSSI
-            $thisChannel = $connectedNode.Channel
+
+            $thisChannel = $interfaceInfo.Channel
+            if ([string]::IsNullOrWhiteSpace([string]$thisChannel) -or $thisChannel -eq "UNKNOWN") {
+                $thisChannel = $connectedNode.Channel
+            }
 
             if ($global:lastBssid -eq "NONE") {
                 $currentApLabel = Format-WiFiRoamWatcherApLabel -Bssid $thisMac -Alias $thisAlias
@@ -599,7 +632,18 @@ while ($true) {
                 $global:lastConnectedSsid = $interfaceInfo.SSID
             }
             elseif ($thisMac -ne $global:lastBssid) {
-                $previousApLabel = Format-WiFiRoamWatcherApLabel -Bssid $global:lastBssid -Alias $global:lastAlias
+                $previousAliasForLog = $global:lastAlias
+                $previousBssidForLog = Normalize-Bssid -Text ([string]$global:lastBssid)
+
+                if (-not [string]::IsNullOrWhiteSpace($previousBssidForLog) -and $global:lastAliasByBssid.ContainsKey($previousBssidForLog)) {
+                    $knownPreviousAlias = ([string]$global:lastAliasByBssid[$previousBssidForLog]).Trim()
+
+                    if (-not [string]::IsNullOrWhiteSpace($knownPreviousAlias)) {
+                        $previousAliasForLog = $knownPreviousAlias
+                    }
+                }
+
+                $previousApLabel = Format-WiFiRoamWatcherApLabel -Bssid $global:lastBssid -Alias $previousAliasForLog
                 $currentApLabel = Format-WiFiRoamWatcherApLabel -Bssid $thisMac -Alias $thisAlias
                 $roamSignalDelta = Format-WiFiRoamWatcherDelta -OldValue $global:lastSignal -NewValue $thisSig -Unit "%"
                 $roamRssiDelta = Format-WiFiRoamWatcherDelta -OldValue $global:lastRssi -NewValue $thisRssi -Unit " dB"
@@ -649,7 +693,7 @@ while ($true) {
         # Only log AP-count changes while connected to the monitored SSID.
         # Ignore zero-count scans because Windows scan results can briefly return no APs.
         # Debounce changes so short-lived partial scan results do not spam the log.
-        if ($currentIsConnectedToTarget -and (-not $invalidBssidForMonitoredSsid) -and $apCount -gt 0) {
+        if ($currentIsConnectedToTarget -and (-not $invalidBssidForMonitoredSsid) -and $apCount -gt 0 -and $apCountIsReliable) {
             if ($global:lastApCount -eq -1) {
                 $global:lastApCount = $apCount
                 $global:pendingApCount = $null
