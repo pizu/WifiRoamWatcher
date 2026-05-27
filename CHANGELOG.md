@@ -2,6 +2,24 @@
 
 All notable changes to Wi-Fi Roam Watcher are documented in this file.
 
+## v1.2.1
+
+### Added
+
+- Logged client hostname, Wi-Fi interface name, adapter description, Wi-Fi MAC address, driver provider, driver version, and driver date at startup and after reconnect events.
+
+### Fixed
+
+- Reduced noisy AP count change logs caused by fallback-only scan results.
+- Reset AP count baseline cleanly after reconnect when Windows only returns the connected-interface fallback.
+- Fixed roam logging so the `From:` AP keeps the previous BSSID alias instead of showing the new AP alias.
+- Preferred live connected-interface signal and channel values for connected AP logging and display when available.
+
+### Notes
+
+- Patch release based on v1.2.
+- No WLAN API / `wlanapi.dll` integration is included in this v1.x patch.
+
 ## v1.2
 
 ### Added
