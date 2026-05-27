@@ -97,6 +97,10 @@ $requiredFunctions = @(
     "Load-ApAliases",
     "Get-ApAlias",
     "Get-CurrentWifiInterface",
+    "Get-WiFiRoamWatcherManagementObjects",
+    "Format-WiFiRoamWatcherDriverDate",
+    "Get-WiFiRoamWatcherClientInfo",
+    "Format-WiFiRoamWatcherClientInfoLogLine",
     "Get-VisibleWifiBssids",
     "Show-WiFiRoamWatcherScreen"
 )
@@ -210,6 +214,9 @@ if ([string]::IsNullOrWhiteSpace($configDisplayName)) {
 }
 
 Write-WiFiRoamWatcherLog -Path $logFile -Message "[$(Get-LogTimestamp)] STARTUP: Wi-Fi Roam Watcher v$scriptVersion | Mode: $monitorMode | Monitoring SSID [$target] | Config: $configDisplayName"
+
+$startupClientInfo = Get-WiFiRoamWatcherClientInfo -InterfaceInfo $currentAtStartup
+Write-WiFiRoamWatcherLog -Path $logFile -Message "[$(Get-LogTimestamp)] $(Format-WiFiRoamWatcherClientInfoLogLine -ClientInfo $startupClientInfo)"
 
 # ------------------------------------------------------------
 # Main monitor loop
@@ -555,6 +562,9 @@ while ($true) {
             $reconnectSignalDelta = Format-WiFiRoamWatcherDelta -OldValue $previousSignal -NewValue $interfaceInfo.Signal -Unit "%"
             $reconnectRssiDelta = Format-WiFiRoamWatcherDelta -OldValue $previousRssi -NewValue $interfaceInfo.RSSI -Unit " dB"
             Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] RECONNECTED: SSID: $($interfaceInfo.SSID) | AP: $reconnectApLabel | Signal: $($interfaceInfo.Signal)% | RSSI: $(Format-Rssi -Rssi $interfaceInfo.RSSI) | Chan: $($interfaceInfo.Channel) | Previous AP before disconnect: $previousApLabel | Previous Signal: $previousSignal% | Previous RSSI: $(Format-Rssi -Rssi $previousRssi) | Previous Chan: $previousChannel | Delta: Signal $reconnectSignalDelta | RSSI $reconnectRssiDelta | Visible APs: $apCount | Mode: $monitorMode"
+
+            $reconnectClientInfo = Get-WiFiRoamWatcherClientInfo -InterfaceInfo $interfaceInfo
+            Write-WiFiRoamWatcherLog -Path $logFile -Message "[$timestamp] $(Format-WiFiRoamWatcherClientInfoLogLine -ClientInfo $reconnectClientInfo)"
 
             $global:lastConnectionState = "connected"
             $global:lastConnectedSsid = $interfaceInfo.SSID

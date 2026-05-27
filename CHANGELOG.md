@@ -4,6 +4,10 @@ All notable changes to Wi-Fi Roam Watcher are documented in this file.
 
 ## v1.2.1
 
+### Added
+
+- Logged client hostname, Wi-Fi interface name, adapter description, Wi-Fi MAC address, driver provider, driver version, and driver date at startup and after reconnect events.
+
 ### Fixed
 
 - Reduced noisy AP count change logs caused by fallback-only scan results.
@@ -14,6 +18,7 @@ All notable changes to Wi-Fi Roam Watcher are documented in this file.
 ### Notes
 
 - Patch release based on v1.2.
+- No WLAN API / `wlanapi.dll` integration is included in this v1.x patch.
 
 ## v1.2
 

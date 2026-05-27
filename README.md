@@ -18,6 +18,7 @@ Current version: **v1.2.1**
 - Reload AP aliases while the script is running.
 - Support configurable refresh interval.
 - Support optional diagnostic bundle creation.
+- Log client hostname, Wi-Fi adapter details, Wi-Fi MAC address, and driver version at startup and after reconnect events.
 - Support daily log rotation and log retention.
 
 ## Requirements
@@ -212,6 +213,7 @@ Common log event types:
 | Event | Meaning |
 |---|---|
 | `STARTUP` | Script started. |
+| `CLIENT_INFO` | Client hostname, Wi-Fi adapter, MAC address, and driver details were logged. |
 | `START` | First connected AP detected. |
 | `ROAMED` | Client moved from one BSSID/AP to another. |
 | `SIGNAL` | Signal or RSSI changed enough to log. |
@@ -309,4 +311,6 @@ For planned and future ideas, see:
 
 The Windows WLAN HTML report can contain computer names, usernames, domain details, saved Wi-Fi profiles, certificate information, IP configuration, and other environment details.
 
-Review or sanitize diagnostic files before sharing them externally.
+Normal log files can also contain hostname, Wi-Fi adapter details, Wi-Fi MAC address, driver version, SSID, BSSID, and AP alias information.
+
+Review or sanitize diagnostic files and log files before sharing them externally.
